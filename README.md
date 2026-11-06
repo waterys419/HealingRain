@@ -2,6 +2,8 @@
 
 Raid frames for healers in **WoW: Forever** (client folder `_forever_`), with editable click healing, mouse-wheel and hover keys.
 
+![Healing Rain raid frames (40-player demo)](screenshots/raid-frames.png)
+
 - Solo: shows just your own square.
 - Party / raid: shows everyone (up to 40), class-colored, with health and mana.
 - Optional Target window.
