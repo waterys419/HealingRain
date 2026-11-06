@@ -4,6 +4,8 @@ Raid frames for healers in **WoW: Forever** (client folder `_forever_`), with ed
 
 ![Healing Rain raid frames (40-player demo)](screenshots/raid-frames.png)
 
+![Healing Rain settings window: demo buttons, size lock, look and mouse actions](screenshots/settings.png)
+
 - Solo: shows just your own square.
 - Party: one compact vertical column, sized to the actual members (up to 5).
 - Raid: one vertical column per occupied subgroup, sized to the actual members (up to 40).
