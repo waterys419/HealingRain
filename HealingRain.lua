@@ -1,4 +1,4 @@
--- Healing Rain 1.9.4 - original addon for Audrey.
+-- Healing Rain 1.9.5 - original addon for Audrey.
 -- Grid raid cells + click-cast (mouse + wheel + modifiers) + hover keys + GUI config.
 -- Secure clicks; health values go directly to native display widgets.
 local addonName = ...
@@ -9,7 +9,7 @@ local openConfig, updateMinimap
 
 local LOW_HP = 0.35
 local LOW_MANA = 0.30
-local COLS = 6
+local GROUP_SIZE = 5
 local CW, CH, GAP = 86, 36, 4
 
 local CLASS_COLORS = {
@@ -110,6 +110,7 @@ local function initDB()
     v.height = dimension(v.height, 36, 32, 100)
     v.nameStyle = validStyle(NAME_STYLES, v.nameStyle, "full")
     v.healthStyle = validStyle(HEALTH_STYLES, v.healthStyle, "percent")
+    if type(v.sizeUnlocked) ~= "boolean" then v.sizeUnlocked = false end
     if type(v.showTarget) ~= "boolean" then v.showTarget = true end
     if type(HealingRainDB.minimap) ~= "table" then HealingRainDB.minimap = {} end
     HealingRainDB.minimap.angle = dimension(HealingRainDB.minimap.angle, 225, 0, 360)
@@ -171,7 +172,7 @@ local function healthText(label, current, maximum, percent, dead)
 end
 
 local panel = CreateFrame("Frame", addonName .. "Panel", UIParent, "BackdropTemplate")
-panel:SetSize(COLS * (CW + GAP) + 14, 60)
+panel:SetSize(CW, CH)
 panel:SetPoint("LEFT", 24, 40)
 panel:SetBackdrop({
     bgFile = "Interface\\ChatFrame\\ChatFrameBackground",
@@ -209,14 +210,19 @@ local cells = {}
 local targetPanel, targetCell
 local pendingRefresh = false
 local demoMode = false
+local demoCount = 40
 local soloLayout = false
 
 local function applyClicksToButton(btn)
     if InCombatLockdown() then return end
+    if demoMode and SecureHandlerExecute then SecureHandlerExecute(btn, "self:ClearBindings()") end
     for _, s in ipairs(MOUSE_SLOTS) do
         local spell = HealingRainDB.binds[s.id]
         local action = type(spell) == "string" and spell:match("^%s*(.-)%s*$"):lower() or ""
-        if action == "target" then
+        if demoMode then
+            btn:SetAttribute(s.pre .. "type" .. s.btn, nil)
+            btn:SetAttribute(s.pre .. "spell" .. s.btn, nil)
+        elseif action == "target" then
             btn:SetAttribute(s.pre .. "type" .. s.btn, "target")
             btn:SetAttribute(s.pre .. "spell" .. s.btn, nil)
         elseif spell and spell ~= "" then
@@ -245,8 +251,8 @@ end
 
 local function ensureCell(i, parent, buttonName)
     if not parent and cells[i] then return cells[i] end
-    local col = (i - 1) % COLS
-    local row = math.floor((i - 1) / COLS)
+    local col = math.floor((i - 1) / GROUP_SIZE)
+    local row = (i - 1) % GROUP_SIZE
     local vf = CreateFrame("Frame", nil, parent or panel, "BackdropTemplate")
     vf:SetSize(CW, CH)
     vf:SetPoint("TOPLEFT", 8 + col * (CW + GAP), -26 - row * (CH + GAP))
@@ -349,12 +355,42 @@ local function paintCell(c, nm, col, frac, mfrac, dead)
     end
 end
 
+local layoutSlots = {}
+local gridColumns, gridRows = 1, 1
+local refreshSizeControls
+local resizeDrag, sizeToggle
+-- Stack each party/raid subgroup vertically; omit empty subgroup columns.
+local function rosterGrid(count)
+    local groups, slots = {}, {}
+    for i = 1, count do
+        local group = math.floor((i - 1) / GROUP_SIZE) + 1
+        if not demoMode and IsInRaid() and GetRaidRosterInfo then
+            local _, _, subgroup = GetRaidRosterInfo(i)
+            if type(subgroup) == "number" and subgroup >= 1 and subgroup <= 8 then group = subgroup end
+        end
+        groups[group] = groups[group] or {}
+        groups[group][#groups[group] + 1] = i
+    end
+    local columns, rows = 0, 0
+    for group = 1, 8 do
+        local members = groups[group]
+        if members then
+            for row, index in ipairs(members) do slots[index] = { col = columns, row = row - 1 } end
+            columns = columns + 1
+            rows = math.max(rows, #members)
+        end
+    end
+    return slots, math.max(1, columns), math.max(1, rows)
+end
+
 local function layoutCell(c, i, isTarget)
     c.vf:SetSize(CW, CH)
     c.vf:ClearAllPoints()
     local compact = soloLayout and not isTarget
-    c.vf:SetPoint("TOPLEFT", (compact and 0 or 8) + ((i - 1) % COLS) * (CW + GAP),
-        -(compact and 0 or 26) - math.floor((i - 1) / COLS) * (CH + GAP))
+    local slot = not isTarget and layoutSlots[i] or nil
+    local col, row = slot and slot.col or 0, slot and slot.row or 0
+    c.vf:SetPoint("TOPLEFT", (compact and 0 or 8) + col * (CW + GAP),
+        -(compact and 0 or 26) - row * (CH + GAP))
     c.mp:SetWidth(CW - 4)
     c.name:ClearAllPoints()
     c.name:SetPoint("TOP", 0, -2)
@@ -393,12 +429,16 @@ local function layoutTarget()
     end
     layoutCell(targetCell, 1, true)
     targetPanel:SetSize(CW + 16, CH + 34)
-    if not soloLayout and HealingRainDB.frames.showTarget then targetPanel:Show() else targetPanel:Hide() end
+    applyClicksToButton(targetCell.btn)
+    if not soloLayout and not demoMode and HealingRainDB.frames.showTarget then targetPanel:Show() else targetPanel:Hide() end
 end
 
 local function applyFrameLayout(count, solo)
     soloLayout = solo or false
     CW, CH = HealingRainDB.frames.width, HealingRainDB.frames.height
+    local columns, rows
+    layoutSlots, columns, rows = rosterGrid(count)
+    gridColumns, gridRows = columns, rows
     if soloLayout then
         panel:SetSize(CW, CH)
         panel:SetBackdropColor(0, 0, 0, 0)
@@ -407,8 +447,8 @@ local function applyFrameLayout(count, solo)
         heading:Hide()
         drink:Hide()
     else
-        panel:SetWidth(COLS * (CW + GAP) + 14)
-        panel:SetHeight(34 + math.ceil(count / COLS) * (CH + GAP))
+        panel:SetWidth(16 + columns * CW + (columns - 1) * GAP)
+        panel:SetHeight(34 + rows * CH + (rows - 1) * GAP)
         panel:SetBackdropColor(0.03, 0.04, 0.07, 0.92)
         panel:SetBackdropBorderColor(0.55, 0.65, 0.75, 0.9)
         title:Show()
@@ -416,20 +456,28 @@ local function applyFrameLayout(count, solo)
     end
     for i, c in ipairs(cells) do layoutCell(c, i) end
     layoutTarget()
+    if refreshSizeControls then refreshSizeControls() end
 end
 
 local function DemoRoster()
     if InCombatLockdown() then return end
     demoMode = true
-    applyFrameLayout(40)
-    for i = 1, 40 do
+    applyFrameLayout(demoCount)
+    for i = 1, demoCount do
         local c = ensureCell(i)
         layoutCell(c, i)
+        c.unit = nil
         c.btn:SetAttribute("unit", nil)
+        applyClicksToButton(c.btn)
         c.vf:Show()
         local cls = CLASS_LIST[((i - 1) % #CLASS_LIST) + 1]
         local nm = DEMO_NAMES[((i - 1) % #DEMO_NAMES) + 1]
         if i % 2 == 1 then nm = nm .. " Storm" end
+        if demoCount == 5 and i == 1 then
+            nm = GetUnitName("player", false)
+            local _, playerClass = UnitClass("player")
+            cls = playerClass or cls
+        end
         local frac, dead = 1.0, false
         local r = i % 10
         if r == 3 then frac = 0.79
@@ -439,7 +487,13 @@ local function DemoRoster()
         elseif r == 9 then dead = true end
         paintCell(c, nm, CLASS_COLORS[cls], frac, 0.6 + (i % 4) * 0.1, dead)
     end
-    for i = 41, #cells do cells[i].vf:Hide() end
+    for i = demoCount + 1, #cells do
+        cells[i].unit = nil
+        cells[i].btn:SetAttribute("unit", nil)
+        applyClicksToButton(cells[i].btn)
+        cells[i].vf:Hide()
+    end
+    drink:Hide()
 end
 
 local function updateVitals()
@@ -476,7 +530,7 @@ local function updateVitals()
     end
     -- The drink hint is only evaluated outside combat, using non-secret mana.
     drink:Hide()
-    if not soloLayout and not InCombatLockdown() then
+    if not demoMode and not soloLayout and not InCombatLockdown() then
         local mfrac = fracOf(UnitPower("player", 0), UnitPowerMax("player", 0))
         local dead = UnitIsDeadOrGhost("player")
         if mfrac and mfrac < LOW_MANA and not secret(dead) and not dead then
@@ -507,6 +561,7 @@ local function RefreshRoster()
         layoutCell(c, i)
         c.unit = u
         c.btn:SetAttribute("unit", u)
+        applyClicksToButton(c.btn)
         c.vf:Show()
         local _, cls = UnitClass(u)
         local col = not secret(cls) and CLASS_COLORS[cls] or nil
@@ -523,6 +578,83 @@ local function RefreshRoster()
         cells[i].vf:Hide()
     end
     updateVitals()
+end
+
+local function syncSizeFields()
+    local widthBox, heightBox = _G[addonName .. "BarWidth"], _G[addonName .. "BarHeight"]
+    if widthBox then widthBox:SetText(tostring(HealingRainDB.frames.width)) end
+    if heightBox then heightBox:SetText(tostring(HealingRainDB.frames.height)) end
+end
+
+local grip = CreateFrame("Button", addonName .. "ResizeGrip", panel)
+grip:SetSize(16, 16)
+grip:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", 0, 0)
+grip:SetFrameLevel(panel:GetFrameLevel() + 10)
+grip:RegisterForDrag("LeftButton")
+local gripArt = grip:CreateTexture(nil, "OVERLAY")
+gripArt:SetAllPoints(grip)
+gripArt:SetTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
+grip:Hide()
+refreshSizeControls = function()
+    if InCombatLockdown() then return end
+    local unlocked = HealingRainDB.frames.sizeUnlocked
+    if unlocked then grip:Show() else grip:Hide(); resizeDrag = nil end
+    if sizeToggle then sizeToggle:SetText(unlocked and "Lock size" or "Unlock size") end
+end
+local function toggleSize()
+    if InCombatLockdown() then
+        print("[Healing Rain] Change size after combat.")
+        return
+    end
+    HealingRainDB.frames.sizeUnlocked = not HealingRainDB.frames.sizeUnlocked
+    refreshSizeControls()
+    print(HealingRainDB.frames.sizeUnlocked and "[Healing Rain] Size unlocked: left-drag the bottom-right grip." or "[Healing Rain] Size locked.")
+end
+grip:SetScript("OnDragStart", function(_, button)
+    if button ~= "LeftButton" or InCombatLockdown() or not HealingRainDB.frames.sizeUnlocked then return end
+    finishSquareDrags()
+    -- Pin the top-left so the dragged bottom-right follows the cursor.
+    local scale = panel:GetEffectiveScale() / UIParent:GetEffectiveScale()
+    local left, top = panel:GetLeft() * scale, panel:GetTop() * scale
+    panel:ClearAllPoints()
+    panel:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", left, top)
+    panel:SetUserPlaced(true)
+    local x, y = GetCursorPosition()
+    resizeDrag = { x = x, y = y, scale = panel:GetEffectiveScale(),
+        width = HealingRainDB.frames.width, height = HealingRainDB.frames.height,
+        columns = gridColumns, rows = gridRows }
+end)
+grip:SetScript("OnUpdate", function()
+    if not resizeDrag then return end
+    if InCombatLockdown() or not HealingRainDB.frames.sizeUnlocked
+        or gridColumns ~= resizeDrag.columns or gridRows ~= resizeDrag.rows then resizeDrag = nil; return end
+    local x, y = GetCursorPosition()
+    local width = dimension(resizeDrag.width + (x - resizeDrag.x) / resizeDrag.scale / resizeDrag.columns, resizeDrag.width, 60, 240)
+    local height = dimension(resizeDrag.height + (resizeDrag.y - y) / resizeDrag.scale / resizeDrag.rows, resizeDrag.height, 32, 100)
+    if width ~= HealingRainDB.frames.width or height ~= HealingRainDB.frames.height then
+        HealingRainDB.frames.width, HealingRainDB.frames.height = width, height
+        RefreshRoster()
+        syncSizeFields()
+    end
+end)
+grip:SetScript("OnDragStop", function() resizeDrag = nil end)
+grip:SetScript("OnHide", function() resizeDrag = nil end)
+
+local function setDemo(count)
+    if InCombatLockdown() then
+        print("[Healing Rain] Change the demo after combat.")
+        return
+    end
+    if not count or (demoMode and demoCount == count) then
+        demoMode = false
+        RefreshRoster()
+        print("[Healing Rain] Demo off; showing your real group.")
+    else
+        demoCount = count
+        panel:Show()
+        DemoRoster()
+        print("[Healing Rain] Demo " .. count .. " players (preview only). Repeat the button/command or /hr demo off to finish.")
+    end
 end
 
 local keyButtons, activeKeys = {}, {}
@@ -614,6 +746,29 @@ local function buildConfig()
     content:SetSize(520, 1100)
     scroll:SetScrollChild(content)
     local y = -10
+    local demos = { { "Demo 5-man", 5 }, { "Demo raid 10", 10 }, { "Demo raid 25", 25 }, { "Demo raid 40", 40 } }
+    for i, option in ipairs(demos) do
+        local count = option[2]
+        local button = CreateFrame("Button", addonName .. "Demo" .. count, content, "UIPanelButtonTemplate")
+        button:SetSize(120, 24)
+        button:SetPoint("TOPLEFT", 8 + (i - 1) * 126, y)
+        button:SetText(option[1])
+        button:SetScript("OnClick", function() setDemo(count) end)
+    end
+    y = y - 34
+    local hint = content:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    hint:SetPoint("TOPLEFT", 16, y)
+    hint:SetText("Preview only. Click the same demo again to return to your group.")
+    y = y - 30
+    sizeToggle = CreateFrame("Button", addonName .. "SizeToggle", content, "UIPanelButtonTemplate")
+    sizeToggle:SetSize(120, 24)
+    sizeToggle:SetPoint("TOPLEFT", 16, y)
+    sizeToggle:SetText(HealingRainDB.frames.sizeUnlocked and "Lock size" or "Unlock size")
+    sizeToggle:SetScript("OnClick", toggleSize)
+    local sizeHint = content:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    sizeHint:SetPoint("TOPLEFT", 146, y - 6)
+    sizeHint:SetText("Unlock, then drag the frame's bottom-right corner.")
+    y = y - 34
     cfgEdits = {}
     local choices = {}
     local function editRow(label, get, set, name)
@@ -706,6 +861,7 @@ local function buildConfig()
         for _, commit in ipairs(choices) do commit() end
         applyBindings()
         RefreshRoster()
+        syncSizeFields()
         print(pendingBindings and "[Healing Rain] Saved. Changes apply after combat." or "[Healing Rain] Saved. Frame look updated; move off a box and back for key changes.")
     end)
     local close = CreateFrame("Button", nil, cfg, "UIPanelButtonTemplate")
@@ -718,7 +874,7 @@ local function buildConfig()
     return cfg
 end
 
-openConfig = function() buildConfig():Show() end
+openConfig = function() buildConfig():Show(); syncSizeFields() end
 
 -- Native water-elemental artwork; no library or other addon's code required.
 local mini = CreateFrame("Button", addonName .. "MinimapButton", Minimap)
@@ -786,6 +942,9 @@ f:SetScript("OnEvent", function(_, ev, name)
     end
     if not ready then return end
     if ev == "PLAYER_LOGIN" then applyBindings(); RefreshRoster()
+    elseif ev == "PLAYER_REGEN_DISABLED" then
+        resizeDrag = nil
+        updateVitals()
     elseif ev == "PLAYER_REGEN_ENABLED" then
         finishSquareDrags()
         if pendingBindings then applyBindings() end
@@ -810,7 +969,12 @@ SlashCmdList["HEALINGRAIN"] = function(msg)
     if low == "hide" then panel:Hide(); print("[Healing Rain] hidden (/hr show)")
     elseif low == "show" then panel:Show(); demoMode = false; RefreshRoster(); print("[Healing Rain] shown")
     elseif low == "refresh" then demoMode = false; RefreshRoster(); print("[Healing Rain] roster refreshed")
-    elseif low == "demo" then panel:Show(); DemoRoster(); print("[Healing Rain] demo 40-raid - /hr live to go back")
+    elseif low == "resize" then toggleSize()
+    elseif low == "demo5" then setDemo(5)
+    elseif low == "demo" or low == "demo40" or low == "demo 40" then setDemo(40)
+    elseif low == "demo10" or low == "demo 10" then setDemo(10)
+    elseif low == "demo25" or low == "demo 25" then setDemo(25)
+    elseif low == "demo off" then setDemo(nil)
     elseif low == "live" then demoMode = false; RefreshRoster(); print("[Healing Rain] live roster")
     elseif low == "target" then
         HealingRainDB.frames.showTarget = not HealingRainDB.frames.showTarget
@@ -830,6 +994,8 @@ SlashCmdList["HEALINGRAIN"] = function(msg)
         print("[Healing Rain] " .. (#parts > 0 and table.concat(parts, " | ") or "no clicks set - /hr config"))
     else
         print("[Healing Rain] /hr show | /hr hide | /hr refresh | /hr demo | /hr live | /hr target | /hr clicks | /hr config | /hr help")
+        print("[Healing Rain] /hr resize: unlock/lock size. When unlocked, left-drag the bottom-right grip (out of combat).")
+        print("[Healing Rain] Preview: /hr demo5 | /hr demo 10 | /hr demo 25 | /hr demo 40. Repeat to toggle off, or /hr demo off. Demo squares cannot cast or target.")
         print("[Healing Rain] Hold Alt + left-drag any square to move its frame (out of combat). Click without dragging to cast your assigned heal.")
     end
 end

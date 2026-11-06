@@ -2,7 +2,7 @@
 ## Title: Healing Rain
 ## Notes: Raid frames, editable click healing, wheel and hover keys.
 ## Author: Audrey
-## Version: 1.9.4
+## Version: 1.9.5
 ## SavedVariables: HealingRainDB
 
 HealingRain.lua
