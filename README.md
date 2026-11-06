@@ -1,6 +1,6 @@
 # Healing Rain
 
-Raid frames for healers in World of Warcraft (Classic Era / 1.16 client), with editable click healing, mouse-wheel and hover keys.
+Raid frames for healers in **WoW Forever** (client folder `_forever_`), with editable click healing, mouse-wheel and hover keys.
 
 - Solo: shows just your own square.
 - Party / raid: shows everyone (up to 40), class-colored, with health and mana.
@@ -11,7 +11,7 @@ Raid frames for healers in World of Warcraft (Classic Era / 1.16 client), with e
 
 1. Download this repo (green **Code** button → **Download ZIP**).
 2. Unzip it and rename the folder to `HealingRain`.
-3. Put it in `World of Warcraft/<your client>/Interface/AddOns/`.
+3. Put it in `World of Warcraft/_forever_/Interface/AddOns/`.
 4. Restart the game, or type `/reload`.
 
 ## Commands
