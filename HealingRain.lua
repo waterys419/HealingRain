@@ -1,4 +1,4 @@
--- Healing Rain 1.9.3 - original addon for Audrey.
+-- Healing Rain 1.9.4 - original addon for Audrey.
 -- Grid raid cells + click-cast (mouse + wheel + modifiers) + hover keys + GUI config.
 -- Secure clicks; health values go directly to native display widgets.
 local addonName = ...
@@ -229,6 +229,20 @@ local function applyClicksToButton(btn)
     end
 end
 
+-- Registered drags consume the drag gesture without replacing secure click actions.
+-- Keep movement on the named panel so WoW retains its user-placed position.
+local movingPanels = {}
+local function finishSquareDrag(owner)
+    if not movingPanels[owner] or InCombatLockdown() then return end
+    owner:StopMovingOrSizing()
+    owner:SetUserPlaced(true)
+    movingPanels[owner] = nil
+end
+local function finishSquareDrags()
+    if InCombatLockdown() then return end
+    for owner in pairs(movingPanels) do finishSquareDrag(owner) end
+end
+
 local function ensureCell(i, parent, buttonName)
     if not parent and cells[i] then return cells[i] end
     local col = (i - 1) % COLS
@@ -272,6 +286,14 @@ local function ensureCell(i, parent, buttonName)
     b:RegisterForClicks("AnyDown", "AnyUp")
     b:SetAttribute("useOnKeyDown", false)
     b:SetFrameLevel(hp:GetFrameLevel() + 2)
+    local owner = parent or panel
+    b:RegisterForDrag("LeftButton")
+    b:SetScript("OnDragStart", function(_, button)
+        if button ~= "LeftButton" or InCombatLockdown() or not IsAltKeyDown() then return end
+        owner:StartMoving()
+        movingPanels[owner] = true
+    end)
+    b:SetScript("OnDragStop", function() finishSquareDrag(owner) end)
     applyClicksToButton(b)
     local cell = { vf = vf, btn = b, hp = hp, mp = mp, name = name, pct = pct }
     if not parent then cells[i] = cell end
@@ -765,6 +787,7 @@ f:SetScript("OnEvent", function(_, ev, name)
     if not ready then return end
     if ev == "PLAYER_LOGIN" then applyBindings(); RefreshRoster()
     elseif ev == "PLAYER_REGEN_ENABLED" then
+        finishSquareDrags()
         if pendingBindings then applyBindings() end
         RefreshRoster()
     elseif ev == "GROUP_ROSTER_UPDATE" or ev == "PLAYER_ENTERING_WORLD" then RefreshRoster()
@@ -780,7 +803,7 @@ SlashCmdList["HEALINGRAIN"] = function(msg)
     if not ready then initDB() end
     msg = (msg or ""):gsub("^%s+", ""):gsub("%s+$", "")
     local low = msg:lower()
-    if InCombatLockdown() and low ~= "config" and low ~= "clicks" then
+    if InCombatLockdown() and low ~= "config" and low ~= "clicks" and low ~= "help" then
         print("[Healing Rain] Change the layout after combat.")
         return
     end
@@ -805,6 +828,8 @@ SlashCmdList["HEALINGRAIN"] = function(msg)
             if sp and sp ~= "" then parts[#parts + 1] = s.label .. ": " .. sp end
         end
         print("[Healing Rain] " .. (#parts > 0 and table.concat(parts, " | ") or "no clicks set - /hr config"))
-    else print("[Healing Rain] /hr show | /hr hide | /hr refresh | /hr demo | /hr live | /hr target | /hr clicks | /hr config")
+    else
+        print("[Healing Rain] /hr show | /hr hide | /hr refresh | /hr demo | /hr live | /hr target | /hr clicks | /hr config | /hr help")
+        print("[Healing Rain] Hold Alt + left-drag any square to move its frame (out of combat). Click without dragging to cast your assigned heal.")
     end
 end

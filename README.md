@@ -27,6 +27,8 @@ Raid frames for healers in **WoW Forever** (client folder `_forever_`), with edi
 | `refresh` | Rebuild the roster |
 | `clicks` | List your click and wheel bindings |
 
+**Move the frame:** hold **Alt** and left-drag any square (out of combat).
+
 Layout changes wait until you leave combat.
 
 Author: Audrey (Waterys419)
