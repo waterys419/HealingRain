@@ -144,7 +144,7 @@ SlashCmdList.HEALINGRAIN('demo')
 assert(named.HealingRainCell40 and named.HealingRainCell40.attrs.unit==nil)
 SlashCmdList.HEALINGRAIN('live')
 assert(not named.HealingRainCell40.parent.visible)
-assert(named.HealingRainPanel.height==150,'demo height not reset')
+assert(named.HealingRainPanel.height==134,'demo height not reset')
 raid=true;members=40;emit('GROUP_ROSTER_UPDATE')
 assert(named.HealingRainCell1.attrs.unit=='raid1')
 assert(named.HealingRainCell40.attrs.unit=='raid40')
@@ -178,7 +178,7 @@ healthButton.scripts.OnClick();save.scripts.OnClick();assert(health.text=='')
 healthButton.scripts.OnClick();save.scripts.OnClick();assert(health.format=='%.0f%%')
 named.HealingRainBarWidth:SetText('140');named.HealingRainBarHeight:SetText('52');save.scripts.OnClick()
 assert(named.HealingRainCell40.parent.width==140 and named.HealingRainCell40.parent.height==52)
-assert(named.HealingRainPanel.height==310)
+assert(named.HealingRainPanel.height==294)
 SlashCmdList.HEALINGRAIN('live')
 combat=true;secretHealth=true
 for i=1,5 do healthButton.scripts.OnClick();save.scripts.OnClick();emit('UNIT_HEALTH') end
@@ -254,16 +254,13 @@ function M:SetPoint(...) protected(self);self.point={...} end
 local panel=named.HealingRainPanel
 local heading=named.HealingRainHeading
 local first=named.HealingRainCell1.parent
-local title
-for _,f in ipairs(frames) do
-    if f.parent==panel and f.text=='|cffffd200Raid|r' then title=f end
-end
-assert(title)
+-- The old "Raid" label must be gone entirely.
+for _,f in ipairs(frames) do assert(f.text~="|cffffd200Raid|r","Raid label still present") end
 raid=false;members=1
 emit('GROUP_ROSTER_UPDATE')
 assert(panel.width==HealingRainDB.frames.width and panel.height==HealingRainDB.frames.height)
 assert(panel.backdropColor[4]==0 and panel.borderColor[4]==0)
-assert(not title.visible and not heading.visible and not named.HealingRainTargetPanel.visible)
+assert(not heading.visible and not named.HealingRainTargetPanel.visible)
 assert(first.visible and first.point[2]==0 and first.point[3]==0)
 assert(named.HealingRainCell1.attrs.unit=='player')
 assert(not named.HealingRainCell2.parent.visible)
@@ -271,9 +268,9 @@ assert(HealingRainDB.frames.showTarget,'solo must preserve target preference')
 combat=true;members=3;emit('GROUP_ROSTER_UPDATE')
 assert(not heading.visible and panel.width==HealingRainDB.frames.width,'combat join changed layout')
 combat=false;emit('PLAYER_REGEN_ENABLED')
-assert(title.visible and heading.visible and named.HealingRainTargetPanel.visible)
+assert(heading.visible and named.HealingRainTargetPanel.visible)
 assert(panel.backdropColor[4]==0.92 and panel.borderColor[4]==0.9)
-assert(first.point[2]==8 and first.point[3]==-26)
+assert(first.point[2]==8 and first.point[3]==-10)
 assert(named.HealingRainCell3.attrs.unit=='party2')
 combat=true;members=1;emit('GROUP_ROSTER_UPDATE')
 assert(heading.visible,'combat leave changed layout')
@@ -330,7 +327,7 @@ local function checkGrid(n,inRaid,columns,rows)
     raid=inRaid;members=n;emit('GROUP_ROSTER_UPDATE')
     local solo=not inRaid and n==1
     assert(panel.width==(solo and 86 or 16+columns*86+(columns-1)*4),'wrong width for '..n)
-    assert(panel.height==(solo and 36 or 34+rows*36+(rows-1)*4),'wrong height for '..n)
+    assert(panel.height==(solo and 36 or 18+rows*36+(rows-1)*4),'wrong height for '..n)
     assert(heading.visible==not solo,'wrong heading visibility')
     for i=1,n do
         local b=named['HealingRainCell'..i]
@@ -338,7 +335,7 @@ local function checkGrid(n,inRaid,columns,rows)
         assert(b.parent.visible,'missing member '..i)
         assert(b.attrs.unit==(inRaid and 'raid'..i or (i==1 and 'player' or 'party'..(i-1))))
         assert(b.parent.point[2]==(solo and 0 or 8)+col*90,'wrong column for member '..i)
-        assert(b.parent.point[3]==-(solo and 0 or 26)-row*40,'wrong row for member '..i)
+        assert(b.parent.point[3]==-(solo and 0 or 10)-row*40,'wrong row for member '..i)
     end
     for i=n+1,40 do
         local b=named['HealingRainCell'..i]
@@ -353,15 +350,15 @@ checkGrid(1,false,1,1)
 -- Partial groups and noncontiguous group numbers: keep members in their subgroup,
 -- with neither empty group columns nor empty rows below the largest group.
 raid=true;members=5;subgroups={7,2,7,2,7};emit('GROUP_ROSTER_UPDATE')
-assert(panel.width==192 and panel.height==150)
+assert(panel.width==192 and panel.height==134)
 for i,slot in ipairs({{1,0},{0,0},{1,1},{0,1},{1,2}}) do
     local p=named['HealingRainCell'..i].parent.point
-    assert(p[2]==8+slot[1]*90 and p[3]==-26-slot[2]*40,'subgroup not respected')
+    assert(p[2]==8+slot[1]*90 and p[3]==-10-slot[2]*40,'subgroup not respected')
 end
 assert(named.HealingRainTargetButton.parent.point[2]==8 and named.HealingRainTargetButton.parent.point[3]==-26)
 -- A membership change during combat must keep the old geometry until combat ends.
 combat=true;raid=false;members=2;emit('GROUP_ROSTER_UPDATE')
-assert(panel.width==192 and panel.height==150)
+assert(panel.width==192 and panel.height==134)
 combat=false;emit('PLAYER_REGEN_ENABLED');checkGrid(2,false,1,2)
 subgroups=nil
 -- Fallback for clients without subgroup information still uses columns of five.
@@ -372,7 +369,7 @@ print('PASS: solo, parties 2-5, raids 10/25/40, vertical orientation, subgroup p
 raid=false;members=1;emit('GROUP_ROSTER_UPDATE')
 local function assertPreview(n)
     assert(panel.width==16+math.ceil(n/5)*86+(math.ceil(n/5)-1)*4)
-    assert(panel.height==34+math.min(n,5)*36+(math.min(n,5)-1)*4)
+    assert(panel.height==18+math.min(n,5)*36+(math.min(n,5)-1)*4)
     assert(not named.HealingRainTargetPanel.visible)
     for i=1,40 do
         local b=named['HealingRainCell'..i]
@@ -388,7 +385,7 @@ local function assertPreview(n)
         assert(not b.overrides or next(b.overrides)==nil,'preview bound wheel/hover casting')
         if i<=n then
             assert(b.parent.point[2]==8+math.floor((i-1)/5)*90)
-            assert(b.parent.point[3]==-26-((i-1)%5)*40)
+            assert(b.parent.point[3]==-10-((i-1)%5)*40)
         end
     end
 end
@@ -449,7 +446,7 @@ for _,case in ipairs({{1,false,1,1},{2,false,1,2},{5,false,1,5},{10,true,2,5},{2
     assert(named.HealingRainBarWidth.text=='106' and named.HealingRainBarHeight.text=='46')
     local solo=not raid and members==1
     assert(panel.width==(solo and 106 or 16+case[3]*106+(case[3]-1)*4))
-    assert(panel.height==(solo and 46 or 34+case[4]*46+(case[4]-1)*4))
+    assert(panel.height==(solo and 46 or 18+case[4]*46+(case[4]-1)*4))
     assert(panel.userPlaced)
 end
 dragSize(100000,-100000)

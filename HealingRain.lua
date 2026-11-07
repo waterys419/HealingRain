@@ -189,15 +189,12 @@ panel:SetScript("OnDragStart", function(self) if not InCombatLockdown() then sel
 panel:SetScript("OnDragStop", panel.StopMovingOrSizing)
 panel:Show()
 
-local title = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-title:SetPoint("TOP", 0, -6)
-title:SetText("|cffffd200Raid|r")
-title:SetFont(title:GetFont(), 14, "OUTLINE")
-
+-- Thin invisible drag/settings strip above the grid (no label).
+local GRID_TOP = 10
 local heading = CreateFrame("Button", addonName .. "Heading", panel)
 heading:SetPoint("TOPLEFT", 4, -2)
 heading:SetPoint("TOPRIGHT", -4, -2)
-heading:SetHeight(22)
+heading:SetHeight(GRID_TOP - 2)
 heading:RegisterForClicks("RightButtonUp")
 heading:RegisterForDrag("LeftButton")
 heading:SetScript("OnClick", function(_, button)
@@ -255,7 +252,7 @@ local function ensureCell(i, parent, buttonName)
     local row = (i - 1) % GROUP_SIZE
     local vf = CreateFrame("Frame", nil, parent or panel, "BackdropTemplate")
     vf:SetSize(CW, CH)
-    vf:SetPoint("TOPLEFT", 8 + col * (CW + GAP), -26 - row * (CH + GAP))
+    vf:SetPoint("TOPLEFT", 8 + col * (CW + GAP), -GRID_TOP - row * (CH + GAP))
     vf:SetBackdrop({
         bgFile = "Interface\\ChatFrame\\ChatFrameBackground",
         edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
@@ -390,7 +387,7 @@ local function layoutCell(c, i, isTarget)
     local slot = not isTarget and layoutSlots[i] or nil
     local col, row = slot and slot.col or 0, slot and slot.row or 0
     c.vf:SetPoint("TOPLEFT", (compact and 0 or 8) + col * (CW + GAP),
-        -(compact and 0 or 26) - row * (CH + GAP))
+        -(compact and 0 or (isTarget and 26 or GRID_TOP)) - row * (CH + GAP))
     c.mp:SetWidth(CW - 4)
     c.name:ClearAllPoints()
     c.name:SetPoint("TOP", 0, -2)
@@ -443,15 +440,13 @@ local function applyFrameLayout(count, solo)
         panel:SetSize(CW, CH)
         panel:SetBackdropColor(0, 0, 0, 0)
         panel:SetBackdropBorderColor(0, 0, 0, 0)
-        title:Hide()
         heading:Hide()
         drink:Hide()
     else
         panel:SetWidth(16 + columns * CW + (columns - 1) * GAP)
-        panel:SetHeight(34 + rows * CH + (rows - 1) * GAP)
+        panel:SetHeight(GRID_TOP + 8 + rows * CH + (rows - 1) * GAP)
         panel:SetBackdropColor(0.03, 0.04, 0.07, 0.92)
         panel:SetBackdropBorderColor(0.55, 0.65, 0.75, 0.9)
-        title:Show()
         heading:Show()
     end
     for i, c in ipairs(cells) do layoutCell(c, i) end
