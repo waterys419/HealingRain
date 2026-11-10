@@ -121,3 +121,6 @@ Author: Audrey (Waterys419)
 
 From the repository folder, run `lua5.1 tests/runtime.lua` and `lua5.1 tests/runtime.lua HealingRain.lua solo`.
 These mock the client API and cover group dimensions, subgroup positions, solo/group transitions, secure drag guards, safe demos, resize limits, per-square scaling, number-field sync, and combat cancellation. In-game mouse/casting checks are still required.
+
+## Known issues
+See [KNOWN_ISSUES.md](KNOWN_ISSUES.md).
